@@ -17,8 +17,7 @@ Requirements:
 Usage:
     Set VIDEO_SOURCE below to a video file path or an integer (0) for webcam,
     then run this file directly in PyCharm (Run 'wrong_way_detector').
-
-Author: Computer Vision Engineering Team
+    
 """
 
 import time
@@ -34,6 +33,9 @@ from ultralytics import YOLO
 
 # Path to a video file, or an int (e.g. 0) to use a connected webcam.
 VIDEO_SOURCE = "traffic_video.mp4"
+
+# Path where the annotated output video will be saved.
+OUTPUT_VIDEO_PATH = "output_wrong_way_detection.mp4"
 
 # Pretrained YOLOv8 nano model -- chosen for real-time inference speed.
 MODEL_WEIGHTS = "yolov8n.pt"
@@ -227,6 +229,21 @@ def main():
     window_name = "Wrong-Way Driver Detector"
     cv2.namedWindow(window_name, cv2.WINDOW_NORMAL)
 
+    # Set up the video writer so the annotated output can be saved to disk.
+    # Pulled from the source capture so the output matches its resolution/FPS.
+    frame_width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+    frame_height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+    source_fps = cap.get(cv2.CAP_PROP_FPS)
+    if not source_fps or source_fps <= 0:
+        # Defensive fallback: some webcams/streams report 0 FPS.
+        source_fps = 30.0
+
+    fourcc = cv2.VideoWriter_fourcc(*"mp4v")
+    video_writer = cv2.VideoWriter(OUTPUT_VIDEO_PATH, fourcc, source_fps, (frame_width, frame_height))
+    if not video_writer.isOpened():
+        print(f"[WARNING] Could not open video writer for: {OUTPUT_VIDEO_PATH}. Output will not be saved.")
+        video_writer = None
+
     frame_index = 0
 
     try:
@@ -254,6 +271,8 @@ def main():
                 # If tracking throws (e.g. transient backend issue), skip this
                 # frame gracefully instead of crashing the whole application.
                 print(f"[WARNING] Tracking failed on frame {frame_index}: {tracking_error}")
+                if video_writer is not None:
+                    video_writer.write(frame)
                 cv2.imshow(window_name, frame)
                 if cv2.waitKey(1) & 0xFF == ord('q'):
                     break
@@ -301,6 +320,10 @@ def main():
             cv2.putText(frame, hud_text, (10, 25), cv2.FONT_HERSHEY_SIMPLEX,
                         0.6, (255, 255, 255), 2, cv2.LINE_AA)
 
+            # Save the annotated frame to the output video file.
+            if video_writer is not None:
+                video_writer.write(frame)
+
             cv2.imshow(window_name, frame)
 
             # Press 'q' to exit cleanly at any time.
@@ -311,6 +334,9 @@ def main():
     finally:
         # Always release resources, even if an unexpected exception occurred.
         cap.release()
+        if video_writer is not None:
+            video_writer.release()
+            print(f"[INFO] Annotated output video saved to: {OUTPUT_VIDEO_PATH}")
         cv2.destroyAllWindows()
 
 
